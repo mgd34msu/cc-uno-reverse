@@ -22,14 +22,25 @@
 
 PANES="$CCUNO_STATE_DIR/panes"
 LOCK="$CCUNO_STATE_DIR/watcher.lock"
+QUEUE="$CCUNO_STATE_DIR/watcher.queue"
 mkdir -p "$CCUNO_STATE_DIR" "$PANES"
 
 note() { printf '%s %s\n' "$(date -Is)" "$1" >> "$CCUNO_LOG" 2>/dev/null || true; }
 
-# Every tool call schedules a watcher; without this they would pile up. Whoever holds
-# the lock is already polling, so a second one adds nothing.
+# Every tool call schedules a watcher; without a lock they would pile up. But plain
+# "exit if busy" leaves a coverage gap: the holder's poll window can close moments before
+# a marker appears, and by then every other watcher has already given up -- which is
+# exactly how a 20s delay was observed in the wild.
+#
+# So: one watcher polls, one may queue for the handoff, the rest exit. When the holder's
+# window closes the queued watcher takes over immediately and coverage is continuous.
 exec 9>"$LOCK"
-flock -n 9 || exit 0
+if ! flock -n 9; then
+  exec 8>"$QUEUE"
+  flock -n 8 || exit 0                          # someone is already waiting; nothing to add
+  flock -w "$CCUNO_POLL_WINDOW" 9 || exit 0     # wait out the current holder, then take over
+  flock -u 8                                    # free the queue slot for the next one
+fi
 
 # --- 1 + 2: poll, clear, print the session id of every transcript patched -------------
 CLEARED=$(

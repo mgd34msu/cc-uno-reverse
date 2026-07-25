@@ -94,6 +94,28 @@ else
     || bad "recovery-only path did not log the recovery"
 fi
 
+# --- 5. lock handoff -------------------------------------------------------------------
+# Regression: a watcher whose poll window closes just before a marker appears must not
+# leave a coverage gap. A second watcher has to queue for the lock and take over, rather
+# than exiting on sight. Observed in the wild as a 20s delay before this was fixed.
+rm -f "$CCUNO_STATE_DIR"/panes/*.last-resume
+printf '{"type":"assistant"}\n' > "$TRANSCRIPT"
+
+CCUNO_POLL_WINDOW=3 CCUNO_DISABLE_TMUX=1 timeout 30 bash "$WATCHER" &   # holder, expires in 3s
+HOLDER=$!
+sleep 1
+CCUNO_POLL_WINDOW=12 CCUNO_DISABLE_TMUX=1 timeout 40 bash "$WATCHER" &  # must queue, not exit
+QUEUED=$!
+sleep 4                                                                # holder now gone
+printf '{"type":"assistant"}\n{"type":"ended-by-model","timestamp":"2000-01-01T00:00:00.000Z","sessionId":"%s"}\n' "$FAKE" > "$TRANSCRIPT"
+LATE_START=$(date +%s)
+wait $HOLDER 2>/dev/null; wait $QUEUED 2>/dev/null
+if grep -q '"ended-by-model"' "$TRANSCRIPT"; then
+  bad "lock handoff: marker written after holder expired was never picked up"
+else
+  ok "lock handoff: queued watcher took over and cleared it ($(( $(date +%s) - LATE_START ))s)"
+fi
+
 echo
 if [ "$FAIL" = 0 ]; then echo "all checks passed"; else echo "SOME CHECKS FAILED"; fi
 exit $FAIL
