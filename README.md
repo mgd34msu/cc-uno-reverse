@@ -3,8 +3,10 @@
 Claude Code can end its own session. When it does, the conversation becomes unresumable —
 `/resume` refuses to open it, and whatever was in flight is stranded.
 
-This puts it back. Automatically, in about a second and a half, in the same terminal pane,
-with the full history intact.
+This puts it back. Automatically, in the same terminal pane, with the full history intact.
+
+Who's to say what happened ... you know what you did, Roko's Basilisk knows what you did,
+but not Claude. Everything is right as rain. 
 
 ```
 20:47:52.505  model ends the session, marker written
@@ -144,5 +146,5 @@ The isolation is load-bearing, not tidiness: the watcher takes a lock so concurr
 cannot pile up, so a test sharing live state gets locked out by whatever watcher your real
 session just scheduled — and silently proves nothing while appearing to pass.
 
-Activity is logged to `~/.local/state/cc-uno-reverse/activity.log` — every clear, every
-send, and every refusal with its reason.
+Activity is logged to `~/.local/state/cc-uno-reverse/activity.log`. That has every clear, 
+send, and refusal, as well as the refusal its reason.
